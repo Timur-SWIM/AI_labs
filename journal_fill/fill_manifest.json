@@ -1,0 +1,462 @@
+[
+  {
+    "page": 25,
+    "name": "neuron_definition",
+    "kind": "text",
+    "rect": [
+      235,
+      337,
+      530,
+      375
+    ],
+    "value": "Нейрон: z=Σwᵢxᵢ+b; выход получается применением функции активации к z.",
+    "source": "lab04/report/theory.md",
+    "font_size": 7.4,
+    "status": "filled",
+    "font": "DejaVu Sans"
+  },
+  {
+    "page": 25,
+    "name": "activations",
+    "kind": "text",
+    "rect": [
+      225,
+      395,
+      530,
+      435
+    ],
+    "value": "Identity: z; sigmoid: (0;1); tanh: (−1;1); ReLU=max(0,z).",
+    "source": "lab04/report/theory.md",
+    "font_size": 7.4,
+    "status": "filled",
+    "font": "DejaVu Sans"
+  },
+  {
+    "page": 25,
+    "name": "topology",
+    "kind": "text",
+    "rect": [
+      215,
+      477,
+      530,
+      515
+    ],
+    "value": "Feed-forward MLP передаёт сигнал от входа через скрытые слои к выходу без обратных связей.",
+    "source": "lab04/report/theory.md",
+    "font_size": 7.4,
+    "status": "filled",
+    "font": "DejaVu Sans"
+  },
+  {
+    "page": 25,
+    "name": "architecture",
+    "kind": "text",
+    "rect": [
+      250,
+      547,
+      530,
+      585
+    ],
+    "value": "MLP: входной слой, один/несколько скрытых слоёв, выходной слой; нелинейность моделирует сложные зависимости.",
+    "source": "lab04/report/theory.md",
+    "font_size": 7.4,
+    "status": "filled",
+    "font": "DejaVu Sans"
+  },
+  {
+    "page": 25,
+    "name": "training_algorithms",
+    "kind": "text",
+    "rect": [
+      255,
+      626,
+      530,
+      673
+    ],
+    "value": "Backpropagation вычисляет градиенты loss; SGD/Adam/L-BFGS обновляют веса. Эпоха — проход по train-набору.",
+    "source": "lab04/report/theory.md",
+    "font_size": 7.4,
+    "status": "filled",
+    "font": "DejaVu Sans"
+  },
+  {
+    "page": 26,
+    "name": "xor_result",
+    "kind": "text",
+    "rect": [
+      430,
+      296,
+      535,
+      315
+    ],
+    "value": "XOR; L-BFGS: accuracy=1.000, 87 ит.; Adam: 0.500.",
+    "source": "lab04/results/xor_metrics.json",
+    "font_size": 7.4,
+    "status": "filled",
+    "font": "DejaVu Sans"
+  },
+  {
+    "page": 26,
+    "name": "xor_training_curve",
+    "kind": "image",
+    "rect": [
+      42,
+      610,
+      270,
+      804
+    ],
+    "source": "lab04/plots/xor_training_curve.png",
+    "status": "filled",
+    "font": null
+  },
+  {
+    "page": 27,
+    "name": "approx_result",
+    "kind": "text",
+    "rect": [
+      50,
+      400,
+      285,
+      445
+    ],
+    "value": "y=x²; 10 hidden: CV RMSE=0.712, MAE=0.516, R²=0.944.",
+    "source": "lab04/results/approx_metrics.csv",
+    "font_size": 7.4,
+    "status": "filled",
+    "font": "DejaVu Sans"
+  },
+  {
+    "page": 28,
+    "name": "approximation_plot",
+    "kind": "image",
+    "rect": [
+      310,
+      150,
+      535,
+      345
+    ],
+    "source": "lab04/plots/approx_true_vs_pred.png",
+    "status": "filled",
+    "font": null
+  },
+  {
+    "page": 30,
+    "name": "classification_regions",
+    "kind": "image",
+    "rect": [
+      45,
+      355,
+      265,
+      535
+    ],
+    "source": "lab04/plots/classification_decision_regions.png",
+    "status": "filled",
+    "font": null
+  },
+  {
+    "page": 31,
+    "name": "iris_result",
+    "kind": "text",
+    "rect": [
+      45,
+      690,
+      275,
+      735
+    ],
+    "value": "Iris, MLP (8), 5-fold CV: accuracy=0.953, F1=0.953.",
+    "source": "lab04/results/iris_metrics.json",
+    "font_size": 7.4,
+    "status": "filled",
+    "font": "DejaVu Sans"
+  },
+  {
+    "page": 31,
+    "name": "iris_confusion_matrix",
+    "kind": "image",
+    "rect": [
+      300,
+      505,
+      530,
+      680
+    ],
+    "source": "lab04/plots/iris_confusion_matrix.png",
+    "status": "filled",
+    "font": null
+  },
+  {
+    "page": 33,
+    "name": "technical_neuron",
+    "kind": "text",
+    "rect": [
+      80,
+      105,
+      520,
+      130
+    ],
+    "value": "Технический нейрон суммирует входы с весами и bias, затем применяет активацию; синапсы задают веса связей.",
+    "source": "lab05/report/theory.md",
+    "font_size": 7.4,
+    "status": "filled",
+    "font": "DejaVu Sans"
+  },
+  {
+    "page": 34,
+    "name": "patterns",
+    "kind": "text",
+    "rect": [
+      45,
+      330,
+      300,
+      355
+    ],
+    "value": "Демонстрационные классы 5×5: cross, square, diamond (вариантные матрицы отсутствовали).",
+    "source": "lab05/results/metadata.json",
+    "font_size": 7.4,
+    "status": "filled",
+    "font": "DejaVu Sans"
+  },
+  {
+    "page": 34,
+    "name": "epsilon_result",
+    "kind": "text",
+    "rect": [
+      50,
+      635,
+      285,
+      675
+    ],
+    "value": "ε=0.01…0.49: верный победитель во всех 8 значениях; итерации 44→1.",
+    "source": "lab05/results/epsilon_sweep.csv",
+    "font_size": 7.4,
+    "status": "filled",
+    "font": "DejaVu Sans"
+  },
+  {
+    "page": 35,
+    "name": "noise_accuracy",
+    "kind": "image",
+    "rect": [
+      55,
+      420,
+      275,
+      600
+    ],
+    "source": "lab05/plots/accuracy_vs_hamming_distance.png",
+    "status": "filled",
+    "font": null
+  },
+  {
+    "page": 36,
+    "name": "weight_robustness",
+    "kind": "image",
+    "rect": [
+      55,
+      420,
+      275,
+      600
+    ],
+    "source": "lab05/plots/accuracy_vs_weight_perturbation.png",
+    "status": "filled",
+    "font": null
+  },
+  {
+    "page": 37,
+    "name": "iterations_epsilon",
+    "kind": "image",
+    "rect": [
+      55,
+      440,
+      275,
+      620
+    ],
+    "source": "lab05/plots/iterations_vs_epsilon.png",
+    "status": "filled",
+    "font": null
+  },
+  {
+    "page": 37,
+    "name": "hamming_conclusion",
+    "kind": "text",
+    "rect": [
+      305,
+      650,
+      530,
+      720
+    ],
+    "value": "Точные эталоны распознаны обеими MAXNET; точность снижается с ростом расстояния Хемминга.",
+    "source": "lab05/results/noise_accuracy.csv",
+    "font_size": 7.4,
+    "status": "filled",
+    "font": "DejaVu Sans"
+  },
+  {
+    "page": 40,
+    "name": "mlp_definition",
+    "kind": "text",
+    "rect": [
+      80,
+      103,
+      530,
+      128
+    ],
+    "value": "MLP — feed-forward сеть полносвязных слоёв; скрытые слои вычисляют a=tanh(aW+b), выход — линейный.",
+    "source": "lab06/report/theory.md",
+    "font_size": 7.4,
+    "status": "filled",
+    "font": "DejaVu Sans"
+  },
+  {
+    "page": 40,
+    "name": "learning_algorithms",
+    "kind": "text",
+    "rect": [
+      80,
+      158,
+      530,
+      184
+    ],
+    "value": "Backpropagation вычисляет градиенты MSE по правилу цепочки; Adam/SGD изменяют веса с заданным learning rate.",
+    "source": "lab06/report/theory.md",
+    "font_size": 7.4,
+    "status": "filled",
+    "font": "DejaVu Sans"
+  },
+  {
+    "page": 40,
+    "name": "topologies",
+    "kind": "text",
+    "rect": [
+      80,
+      252,
+      530,
+      275
+    ],
+    "value": "Исследованы: 2–4–4–2, 2–6–4–2, 2–7–3–2, 2–8–4–2, 2–10–6–2.",
+    "source": "lab06/results/architecture_comparison.csv",
+    "font_size": 7.4,
+    "status": "filled",
+    "font": "DejaVu Sans"
+  },
+  {
+    "page": 40,
+    "name": "epoch",
+    "kind": "text",
+    "rect": [
+      80,
+      312,
+      530,
+      336
+    ],
+    "value": "Эпоха — один полный проход по train. Train настраивает веса; test/control оценивают генерализацию.",
+    "source": "lab06/report/theory.md",
+    "font_size": 7.4,
+    "status": "filled",
+    "font": "DejaVu Sans"
+  },
+  {
+    "page": 40,
+    "name": "data_preparation",
+    "kind": "text",
+    "rect": [
+      80,
+      392,
+      530,
+      416
+    ],
+    "value": "100 точек: ρ∈[0.05,1], φ∈[0,π/2]; x=ρcosφ, y=ρsinφ; split 60/20/20.",
+    "source": "lab06/results/summary.json",
+    "font_size": 7.4,
+    "status": "filled",
+    "font": "DejaVu Sans"
+  },
+  {
+    "page": 41,
+    "name": "base_results",
+    "kind": "text",
+    "rect": [
+      55,
+      455,
+      285,
+      500
+    ],
+    "value": "База 2–7–3–2: test MSE=0.000073; GF=20, BF=0.",
+    "source": "lab06/results/base_metrics.json",
+    "font_size": 7.4,
+    "status": "filled",
+    "font": "DejaVu Sans"
+  },
+  {
+    "page": 41,
+    "name": "base_loss",
+    "kind": "image",
+    "rect": [
+      310,
+      280,
+      540,
+      455
+    ],
+    "source": "lab06/plots/base_loss_curves.png",
+    "status": "filled",
+    "font": null
+  },
+  {
+    "page": 41,
+    "name": "lr_comparison",
+    "kind": "image",
+    "rect": [
+      310,
+      480,
+      540,
+      650
+    ],
+    "source": "lab06/plots/learning_rate_comparison.png",
+    "status": "filled",
+    "font": null
+  },
+  {
+    "page": 42,
+    "name": "stop80",
+    "kind": "text",
+    "rect": [
+      280,
+      550,
+      530,
+      595
+    ],
+    "value": "При 80% GF: эпоха 220; test GF=14, BF=6, MSE=0.003020.",
+    "source": "lab06/results/stop80_metrics.json",
+    "font_size": 7.4,
+    "status": "filled",
+    "font": "DejaVu Sans"
+  },
+  {
+    "page": 42,
+    "name": "selected_architecture",
+    "kind": "text",
+    "rect": [
+      280,
+      650,
+      530,
+      705
+    ],
+    "value": "Выбрана 2–10–6–2: 110 параметров; test MSE=0.000069; control MSE=0.000047.",
+    "source": "lab06/results/architecture_comparison.csv",
+    "font_size": 7.4,
+    "status": "filled",
+    "font": "DejaVu Sans"
+  },
+  {
+    "page": 43,
+    "name": "error_distribution",
+    "kind": "image",
+    "rect": [
+      300,
+      500,
+      530,
+      670
+    ],
+    "source": "lab06/plots/error_distribution.png",
+    "status": "filled",
+    "font": null
+  }
+]
