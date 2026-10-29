@@ -1,0 +1,13 @@
+{
+  "random_seed": 42,
+  "classes": [
+    "cross",
+    "square",
+    "diamond"
+  ],
+  "shape": [
+    5,
+    5
+  ],
+  "variant_data_available": false
+}

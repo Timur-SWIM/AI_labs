@@ -1,0 +1,10 @@
+input,class,potential,feedforward_winner,recurrent_winner,recurrent_steps,is_correct
+cross,cross,1.0,cross,cross,5,True
+cross,square,0.32,cross,cross,5,False
+cross,diamond,0.44,cross,cross,5,False
+square,cross,0.32,square,square,3,False
+square,square,1.0,square,square,3,True
+square,diamond,0.32,square,square,3,False
+diamond,cross,0.44,diamond,diamond,5,False
+diamond,square,0.32,diamond,diamond,5,False
+diamond,diamond,1.0,diamond,diamond,5,True
