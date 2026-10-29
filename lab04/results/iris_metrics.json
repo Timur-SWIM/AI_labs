@@ -1,0 +1,28 @@
+{
+  "cv_accuracy_mean": 0.9533333333333334,
+  "cv_precision_macro_mean": 0.9548821548821549,
+  "cv_recall_macro_mean": 0.9533333333333334,
+  "cv_f1_macro_mean": 0.953216374269006,
+  "confusion_matrix": [
+    [
+      50,
+      0,
+      0
+    ],
+    [
+      0,
+      47,
+      3
+    ],
+    [
+      0,
+      2,
+      48
+    ]
+  ],
+  "classes": [
+    "setosa",
+    "versicolor",
+    "virginica"
+  ]
+}

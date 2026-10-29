@@ -1,0 +1,17 @@
+random_seed: 42
+output_dpi: 180
+xor:
+  hidden: [4]
+  activation: logistic
+  max_iter: 5000
+approximation:
+  hidden_candidates: [5, 10]
+  hidden_selected: [10]
+  max_iter: 5000
+classification:
+  hidden: [4]
+  max_iter: 5000
+iris:
+  hidden: [8]
+  max_iter: 5000
+

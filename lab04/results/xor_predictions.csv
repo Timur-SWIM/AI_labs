@@ -1,0 +1,9 @@
+x1,x2,target,prediction,model
+0,0,0,0,adam
+0,1,1,0,adam
+1,0,1,0,adam
+1,1,0,0,adam
+0,0,0,0,lbfgs
+0,1,1,1,lbfgs
+1,0,1,1,lbfgs
+1,1,0,0,lbfgs
