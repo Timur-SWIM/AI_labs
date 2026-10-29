@@ -1,0 +1,19 @@
+random_seed: 42
+sample_count: 100
+split:
+  train: 60
+  test: 20
+  control: 20
+tolerance: 0.05
+tolerance_note: "Допущение: пример считается GF, если обе абсолютные ошибки |dx| и |dy| не превышают 0.05."
+base_architecture: [2, 7, 3, 2]
+base_learning_rate: 0.01
+max_epochs: 3000
+learning_rates: [0.0005, 0.001, 0.005, 0.01, 0.05, 0.1]
+architectures:
+  - [2, 4, 4, 2]
+  - [2, 6, 4, 2]
+  - [2, 7, 3, 2]
+  - [2, 8, 4, 2]
+  - [2, 10, 6, 2]
+

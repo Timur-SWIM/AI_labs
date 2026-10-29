@@ -1,0 +1,72 @@
+{
+  "data": {
+    "generated": true,
+    "source": null,
+    "samples": 100
+  },
+  "tolerance": 0.05,
+  "base": {
+    "train": {
+      "mse": 2.035777351583231e-05,
+      "mae": 0.00336752237206759,
+      "gf": 60,
+      "bf": 0,
+      "gf_fraction": 1.0
+    },
+    "test": {
+      "mse": 7.294583111186325e-05,
+      "mae": 0.005232333725752977,
+      "gf": 20,
+      "bf": 0,
+      "gf_fraction": 1.0
+    },
+    "control": {
+      "mse": 9.709009304445545e-05,
+      "mae": 0.00640968130104254,
+      "gf": 20,
+      "bf": 0,
+      "gf_fraction": 1.0
+    },
+    "architecture": "2-7-3-2",
+    "parameters": 53,
+    "epochs": 3000
+  },
+  "stop80": {
+    "train": {
+      "mse": 0.0014654701788777125,
+      "mae": 0.027700085200546197,
+      "gf": 48,
+      "bf": 12,
+      "gf_fraction": 0.8
+    },
+    "test": {
+      "mse": 0.0030198206315701723,
+      "mae": 0.03343935012666995,
+      "gf": 14,
+      "bf": 6,
+      "gf_fraction": 0.7
+    },
+    "control": {
+      "mse": 0.002623833470718639,
+      "mae": 0.034970261594039265,
+      "gf": 14,
+      "bf": 6,
+      "gf_fraction": 0.7
+    },
+    "epochs": 220
+  },
+  "chosen": {
+    "architecture": "2-10-6-2",
+    "parameters": 110,
+    "epochs": 3000,
+    "train_mse": 1.3159609837383692e-05,
+    "test_mse": 6.921013291126459e-05,
+    "control_mse": 4.6971304986660155e-05,
+    "train_gf": 60,
+    "train_bf": 0,
+    "test_gf": 20,
+    "test_bf": 0,
+    "control_gf": 20,
+    "control_bf": 0
+  }
+}
