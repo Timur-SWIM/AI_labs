@@ -1,0 +1,5 @@
+# Explicitly opt-in for a student's own VM/LAN; do not use by default.
+services:
+  seminar-playground:
+    ports:
+      - "0.0.0.0:8501:8501"

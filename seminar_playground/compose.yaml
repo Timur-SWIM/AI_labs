@@ -1,0 +1,15 @@
+services:
+  seminar-playground:
+    build: .
+    ports:
+      - "127.0.0.1:8501:8501"
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 768M
