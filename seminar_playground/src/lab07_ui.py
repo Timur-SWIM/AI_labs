@@ -216,21 +216,49 @@ def render_lab07():
     if teacher: st.info("Ведущий: просите менять только один фактор, выбирать модель по Test и открывать Control в самом конце.")
     task = st.radio("Выберите маршрут", list(TASK_NAMES), format_func=TASK_NAMES.get, horizontal=True, key="lab07_task")
     key = "lab07_" + task
-    stage = st.radio("Этап исследования", STEP_NAMES, horizontal=True, key="lab07_step")
-    source, frame, splits, meta = _load_data(task, key)
-    if frame is None: return
+    step_key = key + "step_index"
+    step = max(0, min(4, int(st.session_state.get(step_key, 0))))
+    st.session_state[step_key] = step
+    st.progress((step + 1) / len(STEP_NAMES), text=f"Этап {step + 1} из 5 · {STEP_NAMES[step]}")
+    back, next_step = st.columns(2)
+    if back.button("Назад", key=key + "back", disabled=step == 0):
+        st.session_state[step_key] = step - 1
+        st.rerun()
+    if next_step.button("Далее", key=key + "next", disabled=step == 4):
+        st.session_state[step_key] = step + 1
+        st.rerun()
+    with st.container(key=key + f"screen_{step + 1}"):
+        _render_lab07_step(task, key, step)
+
+
+def _render_lab07_step(task, key, step):
+    if step == 0:
+        source, frame, splits, meta = _load_data(task, key)
+        if frame is None:
+            st.session_state.pop(key + "data", None)
+            return
+        st.session_state[key + "data"] = (source, frame, splits, meta)
+    else:
+        data = st.session_state.get(key + "data")
+        if data is None:
+            st.warning("Сначала подготовьте данные на этапе 1.")
+            return
+        source, frame, splits, meta = data
+    stage = STEP_NAMES[step]
     st.info(f"Сейчас нужно: пройти этап «{stage}». Источник: {meta['source']}; Train/Test/Control: {len(splits['train'])}/{len(splits['test'])}/{len(splits['control']) if splits.get('control') is not None else 0}.")
-    if stage == STEP_NAMES[0]:
+    if step == 0:
         st.subheader("1/5 · Получите и исследуйте данные")
         st.plotly_chart(_plot_source(frame, task), use_container_width=True)
         st.dataframe(frame.head(10), use_container_width=True)
         st.caption(f"Строк: {len(frame)} · столбцов: {len(frame.columns)} · доля пропусков: {frame.isna().mean().mean():.1%} · подсказка типа: {TASK_NAMES[suggest_task(frame)]}")
         st.text_area("Что за задача и почему?", key=key + "hypothesis")
         return
-    schema = _prepare_schema(task, frame, splits, key, meta["source"])
+    schema = _prepare_schema(task, frame, splits, key, meta["source"]) if step == 1 else st.session_state.get(key + "schema")
     if schema is None: return
+    if step == 1:
+        st.session_state[key + "schema"] = schema
     features, target, classes, prepared_splits, time_column, value_column, lag = schema
-    if stage == STEP_NAMES[1]:
+    if step == 1:
         st.subheader("2/5 · Определите задачу и подготовьте признаки")
         st.write(f"Features → Target: `{features}` → `{target}`")
         st.plotly_chart(_plot_source(frame, task, None if task == "timeseries" else target), use_container_width=True)
@@ -243,7 +271,13 @@ def render_lab07():
     x_train_raw, x_test_raw = prepared_splits["train"][features], prepared_splits["test"][features]
     preprocessor = fit_preprocessor(x_train_raw, features)
     x_train, x_test = preprocessor.transform(x_train_raw), preprocessor.transform(x_test_raw)
-    layers, learning_rate, epochs, seed, optimizer, init_scale, tolerance = _settings(task, x_train.shape[1], output_dim, key)
+    settings = _settings(task, x_train.shape[1], output_dim, key) if step == 2 else st.session_state.get(key + "settings")
+    if settings is None:
+        st.warning("Сначала настройте модель на этапе 3.")
+        return
+    if step == 2:
+        st.session_state[key + "settings"] = settings
+    layers, learning_rate, epochs, seed, optimizer, init_scale, tolerance = settings
     data_fp = experiment_fingerprint({"train": prepared_splits["train"], "test": prepared_splits["test"], "control": prepared_splits.get("control")}, task, features, target, time_column=time_column, value_column=value_column, lag=lag, preprocessing={"features": features})
     model_fp = model_fingerprint(data_fingerprint=data_fp, architecture=layers, optimizer=optimizer, learning_rate=learning_rate, seed=seed, init_scale=init_scale, task=task)
     old_fp = st.session_state.get(key + "fingerprint")
@@ -256,7 +290,7 @@ def render_lab07():
         st.session_state.pop(key + "locked_model", None)
         st.session_state.pop(key + "experiments", None)
     st.caption(f"Fingerprint данных/модели: `{short_fingerprint(model_fp)}`")
-    if stage == STEP_NAMES[2]:
+    if step == 2:
         st.subheader("3/5 · Обучите модель")
         st.caption(f"Схема MLP: {x_train.shape[1]} → {' → '.join(map(str, layers[1:-1])) or 'без скрытого слоя'} → {output_dim}")
         actions = st.columns(3)
@@ -264,7 +298,7 @@ def render_lab07():
             engine = Lab07Engine(layers, task, seed, init_scale=init_scale, optimizer=optimizer, learning_rate=learning_rate, tolerance=tolerance)
             engine.train_epochs(epochs, x_train, y_train, x_test, y_test); st.session_state[key + "engine"] = engine; st.session_state[key + "fingerprint"] = model_fp; st.session_state.pop(key + "control_result", None); st.rerun()
         if actions[1].button(f"Продолжить +{epochs} эпох", key=key + "continue") and engine is not None:
-            engine.stopped = False; engine.train_epochs(epochs, x_train, y_train, x_test, y_test); st.session_state[key + "engine"] = engine
+            engine.stopped = False; engine.train_epochs(epochs, x_train, y_train, x_test, y_test); st.session_state[key + "engine"] = engine; st.session_state.pop(key + "locked_model", None); st.session_state.pop(key + "control_result", None)
         if actions[2].button("Начать новый эксперимент", key=key + "reset"):
             for suffix in ("engine", "fingerprint", "control_result", "locked_model", "experiments"): st.session_state.pop(key + suffix, None)
             st.rerun()
@@ -294,7 +328,7 @@ def render_lab07():
         predicted_labels = np.asarray([classes[index] for index in np.argmax(prediction, 1)], dtype=object); metrics = classification_metrics(prepared_splits["test"][target].tolist(), predicted_labels, classes)
     elif task == "timeseries": metrics = forecasting_metrics(y_test, prediction, tolerance)
     else: metrics = regression_metrics(y_test, prediction, tolerance)
-    if stage == STEP_NAMES[3]:
+    if step == 3:
         st.subheader("4/5 · Сравните эксперименты и зафиксируйте выбор")
         if st.button("Сохранить эксперимент для сравнения", key=key + "save"):
             st.session_state.setdefault(key + "experiments", []).append({"fingerprint": model_fp, "snapshot": engine.snapshot(), "metrics": metrics, "architecture": "-".join(map(str, layers)), "parameters": engine.parameter_count, "epoch": engine.epoch, "note": st.session_state.get(key + "hypothesis", "")})
@@ -305,12 +339,12 @@ def render_lab07():
             st.session_state.pop(key + "control_result", None)
         if st.session_state.get(key + "locked_model"): st.success("Модель зафиксирована. Теперь доступна финальная оценка Control на следующем этапе.")
         return
-    if stage == STEP_NAMES[4]:
+    if step == 4:
         st.subheader("5/5 · Экспорт и Orange")
         locked = st.session_state.get(key + "locked_model")
         if splits.get("control") is not None and not locked: st.warning("Сначала зафиксируйте выбранную модель на этапе 4.")
         control_result = st.session_state.get(key + "control_result")
-        if splits.get("control") is not None and locked and locked["fingerprint"] == model_fp and st.button("Итоговая проверка Control", key=key + "control"):
+        if splits.get("control") is not None and locked and locked["fingerprint"] == model_fp and locked["epoch"] == engine.epoch and st.button("Итоговая проверка Control", key=key + "control", disabled=control_result is not None):
             control = prepared_splits["control"]; xc = preprocessor.transform(control[features]); yc = pd.to_numeric(control[target], errors="raise").to_numpy(float).reshape(-1, 1) if task != "classification" else control[target].tolist()
             if task == "classification": control_result = classification_metrics(yc, [classes[index] for index in np.argmax(engine.predict(xc), 1)], classes)
             else: control_result = forecasting_metrics(yc, engine.predict(xc), tolerance)
