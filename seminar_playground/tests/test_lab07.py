@@ -5,13 +5,14 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.lab07_datasets import classification_demo, regression_demo, timeseries_demo
+from src.lab07_datasets import classification_demo, demo_splits, regression_demo, timeseries_demo
 from src.lab07_engine import Lab07Engine, one_hot
 from src.lab07_exports import orange_zip
 from src.lab07_loader import parse_uploaded, suggest_task
 from src.lab07_metrics import classification_metrics, regression_metrics
 from src.lab07_preprocessing import fit_preprocessor
-from src.lab07_timeseries import chronological_lag_split, make_lagged, persistence_baseline
+from src.lab07_timeseries import chronological_lag_split, make_lagged, make_lagged_parts, persistence_baseline
+from src.lab07_ui_helpers import choose_time_value, experiment_fingerprint, model_fingerprint, prepare_timeseries_parts
 
 
 def test_loader_delimiter_decimal_and_limits():
@@ -63,6 +64,55 @@ def test_timeseries_is_chronological_and_baseline():
     assert parts["train"]["time"].iloc[-1] < parts["test"]["time"].iloc[0]
     assert np.allclose(persistence_baseline(parts["test"], ["lag_1"]), parts["test"]["lag_1"].to_numpy()[:, None])
     with pytest.raises(ValueError): make_lagged(frame.iloc[::-1], "value", "time", 3)
+
+
+def test_forecasting_alias_and_demo_value_default():
+    demo = timeseries_demo(42, 48)
+    value, time = choose_time_value(demo.frame)
+    assert value == "value" and time == "time"
+    lagged = make_lagged(demo.frame, value, time, 3)
+    engine = Lab07Engine((3, 4, 1), task="timeseries", seed=42)
+    x = lagged[["lag_1", "lag_2", "lag_3"]].to_numpy(float)
+    y = lagged[["target"]].to_numpy(float)
+    engine.train_epochs(10, x, y)
+    assert engine.epoch == 10 and len(engine.history) == 10
+
+
+def test_uploaded_timeseries_parts_keep_target_ownership_and_past_only_context():
+    source = pd.DataFrame({"time": np.arange(12), "value": np.arange(12, dtype=float)})
+    parts = {"train": source.iloc[:6].copy(), "test": source.iloc[6:9].copy(), "control": source.iloc[9:].copy()}
+    prepared = make_lagged_parts(parts, "value", "time", 2)
+    assert set(prepared) == {"train", "test", "control"}
+    assert prepared["test"]["target"].tolist() == [6.0, 7.0, 8.0]
+    assert prepared["test"].iloc[0]["lag_1"] == 5.0
+    assert prepared["test"].iloc[0]["lag_2"] == 4.0
+    assert prepared["control"]["target"].tolist() == [9.0, 10.0, 11.0]
+
+
+def test_fingerprint_changes_with_data_and_model():
+    frame = regression_demo(42, 20).frame
+    parts = {"train": frame.iloc[:12], "test": frame.iloc[12:16], "control": frame.iloc[16:]}
+    first = experiment_fingerprint(parts, "regression", ["x1", "x2"], "target", preprocessing={"version": 2})
+    changed = frame.copy(); changed.loc[0, "x1"] += 1
+    second = experiment_fingerprint({**parts, "train": changed.iloc[:12]}, "regression", ["x1", "x2"], "target", preprocessing={"version": 2})
+    assert first != second
+    assert model_fingerprint(data_fingerprint=first, architecture=(2, 4, 1), optimizer="adam", learning_rate=.01, seed=42, init_scale=1, task="regression") != model_fingerprint(data_fingerprint=first, architecture=(2, 8, 1), optimizer="adam", learning_rate=.01, seed=42, init_scale=1, task="regression")
+
+
+def test_headerless_txt_keeps_first_data_row():
+    frame = parse_uploaded(b"1 2 3\n4 5 6\n", delimiter=r"\s+", header=None)
+    assert frame.shape == (2, 3)
+    assert frame.iloc[0].tolist() == [1, 2, 3]
+
+
+def test_timeseries_export_contains_lags_and_hides_control_metrics():
+    dataset, parts = demo_splits('timeseries', 42)
+    lagged = prepare_timeseries_parts(parts, 'value', 'time', 3, demo=True)
+    payload = orange_zip(dataset_manifest={'task': 'timeseries', 'control_revealed': False}, train=lagged['train'], test=lagged['test'], control=lagged['control'], metrics={'test': {'rmse': 1}, 'control': {'rmse': 2}})
+    with zipfile.ZipFile(io.BytesIO(payload)) as archive:
+        train = pd.read_csv(archive.open('orange_lab07_export/train.csv'))
+        assert {'lag_1', 'lag_2', 'lag_3', 'target', 'time'} <= set(train.columns)
+        assert b'control' not in archive.read('orange_lab07_export/metrics.json')
 
 
 def test_demo_task_suggestions_and_export_hides_control_metrics():

@@ -57,8 +57,11 @@ class Lab07Engine:
 
     def __post_init__(self):
         self.layers = validate_layers(self.layers)
-        if self.task not in {"regression", "classification"}:
-            raise ValueError("task должен быть regression или classification")
+        if self.task not in {"regression", "classification", "timeseries"}:
+            raise ValueError("task должен быть regression, timeseries или classification")
+        # Forecasting использует тот же линейный выход/MSE, но сохраняет семантику режима.
+        if self.task == "timeseries":
+            self.task = "timeseries"
         if self.optimizer not in {"adam", "sgd"}:
             raise ValueError("optimizer должен быть adam или sgd")
         if not np.isfinite(self.learning_rate) or self.learning_rate <= 0:

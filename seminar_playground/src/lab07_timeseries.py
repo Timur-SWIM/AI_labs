@@ -19,13 +19,7 @@ def make_lagged(frame, value_column="value", time_column=None, lag=3):
         raise ValueError("Ряд содержит пропуски или Inf")
     if time_column is not None:
         times = frame[time_column].to_numpy()
-        if pd.isna(times).any() or pd.Series(times).duplicated().any():
-            raise ValueError("Время должно быть непустым и уникальным")
-        try:
-            if not np.all(times[1:] > times[:-1]):
-                raise ValueError("Временной ряд должен быть отсортирован строго по возрастанию")
-        except TypeError as exc:
-            raise ValueError("Столбец времени должен быть сравнимым") from exc
+        _validate_times(times)
     else:
         times = np.arange(len(frame))
     rows = []
@@ -34,6 +28,46 @@ def make_lagged(frame, value_column="value", time_column=None, lag=3):
         row.update({"target": values[index], "time": times[index]})
         rows.append(row)
     return pd.DataFrame(rows)
+
+
+def _validate_times(times):
+    if pd.isna(times).any() or pd.Series(times).duplicated().any():
+        raise ValueError("Время должно быть непустым и уникальным")
+    try:
+        if not np.all(times[1:] > times[:-1]):
+            raise ValueError("Временной ряд должен быть отсортирован строго по возрастанию")
+    except TypeError as exc:
+        raise ValueError("Столбец времени должен быть сравнимым") from exc
+
+
+def make_lagged_parts(parts: dict[str, pd.DataFrame], value_column: str, time_column: str | None, lag: int):
+    """Строит окна по общей хронологии, но принадлежность строки сохраняет.
+
+    Первые тестовые/контрольные строки могут использовать только исторические значения
+    из предыдущих частей. Будущие target-значения в окно не попадают.
+    """
+    names = [name for name in ("train", "test", "control") if parts.get(name) is not None]
+    if not names or any(parts[name].empty for name in names):
+        raise ValueError("Все заданные временные части должны содержать строки")
+    columns = [value_column] + ([] if time_column is None else [time_column])
+    source = pd.concat([parts[name][columns].copy().assign(_split=name, _order=np.arange(len(parts[name]))) for name in names], ignore_index=True)
+    if time_column is not None:
+        # Не сортируем молча: порядок файлов должен уже быть хронологическим.
+        _validate_times(source[time_column].to_numpy())
+    values = pd.to_numeric(source[value_column], errors="coerce").to_numpy(float)
+    if not np.isfinite(values).all() or len(values) <= lag:
+        raise ValueError("Недостаточно конечных наблюдений для выбранного lag")
+    times = source[time_column].to_numpy() if time_column is not None else np.arange(len(source))
+    rows = []
+    for index in range(lag, len(source)):
+        row = {f"lag_{step}": values[index - step] for step in range(1, lag + 1)}
+        row.update({"target": values[index], "time": times[index], "_split": source.iloc[index]["_split"], "_source_row": int(source.iloc[index]["_order"])})
+        rows.append(row)
+    lagged = pd.DataFrame(rows)
+    result = {}
+    for name in names:
+        result[name] = lagged.loc[lagged["_split"] == name].drop(columns=["_split"]).reset_index(drop=True)
+    return result
 
 
 def chronological_lag_split(lagged, train=.6, test=.2):

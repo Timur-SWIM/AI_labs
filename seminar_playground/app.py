@@ -12,7 +12,7 @@ from src.exports import csv_bytes, json_bytes, markdown_report, parity_png
 from src.scenarios import SCENARIOS, success
 from src.lab07_ui import render_lab07
 
-st.set_page_config(page_title="MLP Playground — ЛР6", page_icon="🧠", layout="wide")
+st.set_page_config(page_title="MLP Playground — ЛР6 и ЛР7", page_icon="🧠", layout="wide")
 
 def notice(text): st.caption("Вычислено по текущему эксперименту · " + text)
 def footer(observation, question):
@@ -24,6 +24,38 @@ def init():
     if "gd" not in st.session_state: st.session_state.gd = [-1.0]
     if "control" not in st.session_state: st.session_state.control = None
 init()
+
+st.sidebar.title("MLP Playground")
+route = st.sidebar.radio("Раздел", ["Главная", "ЛР6 · Как обучается сеть", "ЛР7 · Как выбрать модель", "Теория и справка"], key="global_route")
+if route == "Главная":
+    st.title("🧠 MLP Playground")
+    st.subheader("Учебный семинар по многослойным сетям")
+    st.write("Выберите лабораторную, сформулируйте гипотезу, проведите реальный эксперимент и объясните результат.")
+    left, right = st.columns(2)
+    with left:
+        st.markdown("### ЛР6 · Как обучается сеть")
+        st.write("90 минут: один нейрон, градиентный спуск, живая MLP и диагностика.")
+        st.button("Начать ЛР6", type="primary", on_click=lambda: st.session_state.update(global_route="ЛР6 · Как обучается сеть"))
+    with right:
+        st.markdown("### ЛР7 · Как выбрать модель")
+        st.write("Пять этапов: данные, постановка, обучение, сравнение и Orange.")
+        st.button("Начать ЛР7", type="primary", on_click=lambda: st.session_state.update(global_route="ЛР7 · Как выбрать модель"))
+    st.info("Сейчас нужно: выбрать маршрут. Все вычисления выполняются локально в текущей сессии браузера.")
+    st.stop()
+if route == "ЛР7 · Как выбрать модель":
+    render_lab07()
+    st.stop()
+if route == "Теория и справка":
+    st.title("Теория и справка")
+    st.subheader("Train → Test → Control")
+    st.write("Train используется для обучения и предобработки. Test помогает выбрать архитектуру. Control открывается один раз после фиксации модели и не участвует в настройке.")
+    st.subheader("Метрики")
+    st.write("Loss — функция оптимизации. GF/BF — число хороших/плохих объектов по явному допуску для регрессии и прогноза; в классификации GF означает правильные классы.")
+    st.subheader("Переобучение")
+    st.write("Если Train Loss уменьшается, а Test Loss перестаёт улучшаться, это сигнал проверить сложность модели и обобщение.")
+    st.subheader("Orange")
+    st.write("ZIP содержит исходные CSV и инструкцию. Orange обучает собственную модель; веса NumPy-MLP туда не импортируются.")
+    st.stop()
 
 st.title("🧠 MLP Playground — ЛР №6")
 st.caption("Локальный учебный тренажёр: никаких аккаунтов, внешних API, телеметрии или сетевых запросов. Формулы меток: x=ρcosφ, y=ρsinφ. Проверьте соглашения в методичке.")
@@ -127,6 +159,3 @@ with tab4:
     st.text_area("Гипотеза / Что изменил / Что увидел / Вывод",key="hypothesis")
     if st.session_state.get("teacher"): st.info("Объяснение: A — поднимите lr постепенно; B — уменьшите lr; C — проверьте размер модели/данных и сравните validation, а не рисуйте переобучение.")
     footer("Симптомы и успех считаются из реального запуска с фиксированными настройками, не из готовой картинки.","Какая метрика показывает качество на новых данных и почему одного train loss недостаточно?")
-
-# ЛР7 подключена как отдельный раздел; код и состояние ЛР6 выше не меняются.
-render_lab07()
