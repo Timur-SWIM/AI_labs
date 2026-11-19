@@ -38,7 +38,7 @@ if route == "Главная":
         st.button("Начать ЛР6", type="primary", on_click=lambda: st.session_state.update(global_route="ЛР6 · Как обучается сеть"))
     with right:
         st.markdown("### ЛР7 · Как выбрать модель")
-        st.write("Пять этапов: данные, постановка, обучение, сравнение и Orange.")
+        st.write("Три шага: подготовьте данные, сравните две модели и сделайте вывод по Control.")
         st.button("Начать ЛР7", type="primary", on_click=lambda: st.session_state.update(global_route="ЛР7 · Как выбрать модель"))
     st.info("Сейчас нужно: выбрать маршрут. Все вычисления выполняются локально в текущей сессии браузера.")
     st.stop()

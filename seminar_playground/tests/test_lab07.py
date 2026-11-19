@@ -115,6 +115,18 @@ def test_timeseries_export_contains_lags_and_hides_control_metrics():
         assert b'control' not in archive.read('orange_lab07_export/metrics.json')
 
 
+def test_final_zip_keeps_comparison_csv_and_recovery_json():
+    frame = pd.DataFrame({'x': [1, 2], 'target': [3, 4]})
+    comparison = pd.DataFrame({'ID': ['E001', 'E002'], 'Test RMSE': [0.5, 0.4]})
+    payload = orange_zip(dataset_manifest={'task': 'regression', 'control_revealed': True},
+                         train=frame, test=frame, experiments=comparison, research_json=b'{"schema_version":1}')
+    with zipfile.ZipFile(io.BytesIO(payload)) as archive:
+        names = set(archive.namelist())
+        assert {'orange_lab07_export/experiments.csv', 'orange_lab07_export/research.json',
+                'orange_lab07_export/README_ORANGE.md'} <= names
+        assert pd.read_csv(archive.open('orange_lab07_export/experiments.csv'))['ID'].tolist() == ['E001', 'E002']
+
+
 def test_demo_task_suggestions_and_export_hides_control_metrics():
     regression = regression_demo().frame; classification = classification_demo().frame
     assert suggest_task(regression) == "regression"
