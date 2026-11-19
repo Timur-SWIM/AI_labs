@@ -36,8 +36,7 @@ def _card(task, title, text):
 
 def _demo_preview(task):
     dataset, splits = demo_splits(task, 42)
-    st.warning("Демонстрационные данные — не данные индивидуального варианта.")
-    st.caption(f"Набор: {dataset.name} · seed={dataset.seed} · формула: {dataset.formula}")
+    st.caption(f"Учебные данные: {dataset.name}. Для своего варианта загрузите файлы.")
     return dataset.frame, splits, {"source": "demo", "name": dataset.name, "seed": dataset.seed, "formula": dataset.formula}
 
 
@@ -75,13 +74,15 @@ def _upload_source(task, key):
         return None, None, None
     parsed, infos = {}, []
     for index, uploaded in enumerate(uploads):
-        frame, info = _parse_uploaded_with_options(uploaded, f"{key}_{index}_")
+        with st.expander(f"Параметры файла · {uploaded.name}"):
+            frame, info = _parse_uploaded_with_options(uploaded, f"{key}_{index}_")
         if frame is not None:
             parsed[uploaded.name] = frame
             infos.append({**info, "rows": len(frame), "columns": len(frame.columns)})
     if not parsed:
         return None, None, None
-    st.dataframe(pd.DataFrame(infos), hide_index=True, use_container_width=True)
+    with st.expander('Сведения о загруженных файлах'):
+        st.dataframe(pd.DataFrame(infos), hide_index=True, use_container_width=True)
     names = list(parsed)
     train_name = st.selectbox("Файл Train", names, index=next((i for i, name in enumerate(names) if "train" in name.lower()), 0), key=key + "train")
     test_name = st.selectbox("Файл Test для выбора модели", [MISSING] + [name for name in names if name != train_name], key=key + "test")
@@ -200,11 +201,11 @@ def _settings(task, input_dim, output_dim, key):
     else: hidden = st.text_input("Скрытые слои через запятую", "8,8", key=key + "hidden")
     try: layers = validate_layers((input_dim, *(int(value.strip()) for value in hidden.split(",") if value.strip()), output_dim), input_dim, output_dim)
     except ValueError as exc: st.error(str(exc)); layers = (input_dim, 8, output_dim)
-    columns = st.columns(3)
+    columns = st.columns(2)
     learning_rate = float(columns[0].number_input("Learning rate", 1e-5, 2., .01, format="%.5f", key=key + "lr"))
     epochs = int(columns[1].number_input("Эпох за порцию", 1, 5000, 20, key=key + "epochs"))
-    seed = int(columns[2].number_input("Seed", 0, 999999, 42, key=key + "seed"))
-    with st.expander("Дополнительные параметры"):
+    with st.expander("Дополнительные параметры модели"):
+        seed = int(st.number_input("Seed", 0, 999999, 42, key=key + "seed"))
         optimizer = st.selectbox("Оптимизатор", ["adam", "sgd"], key=key + "optimizer")
         init_scale = float(st.number_input("Масштаб инициализации", .01, 20., 1., key=key + "scale"))
         tolerance = float(st.number_input("Допуск GF/BF", .0001, 100., .1, key=key + "tol"))
@@ -221,16 +222,30 @@ def _metrics(task, frame, target, prediction, classes, tolerance):
 
 
 def _history_table(records, chosen=None):
-    return pd.DataFrame([{'ID': r['id'], 'Имя': r['name'], 'Архитектура': '-'.join(map(str, r['architecture'])),
-                          'Параметров': r['parameters'], 'Эпох': r['epochs'], 'Train': str({k: v for k, v in r['train_metrics'].items() if k in ('rmse', 'accuracy', 'macro_f1')}),
-                          'Test': str({k: v for k, v in r['test_metrics'].items() if k in ('rmse', 'accuracy', 'macro_f1')}),
-                          'Seed': r['seed'], 'LR': r['learning_rate'], 'Выбрана': r['id'] == chosen} for r in records])
+    rows = []
+    for record in records:
+        train, test = record['train_metrics'], record['test_metrics']
+        score = ('Accuracy', 'Macro-F1') if 'accuracy' in test else ('RMSE', 'MAE')
+        keys = ('accuracy', 'macro_f1') if 'accuracy' in test else ('rmse', 'mae')
+        row = {'ID': record['id'], 'Модель': record['name'], 'Архитектура': '→'.join(map(str, record['architecture'])),
+               'Эпох': record['epochs'], 'Выбрана': record['id'] == chosen}
+        row.update({f'Train {label}': train.get(metric) for label, metric in zip(score, keys)})
+        row.update({f'Test {label}': test.get(metric) for label, metric in zip(score, keys)})
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def _metric_cards(metrics, task, prefix='Test'):
+    fields = [('Accuracy', 'accuracy'), ('Macro-F1', 'macro_f1'), ('Верно / ошибок', None)] if task == 'classification' else [('RMSE', 'rmse'), ('MAE', 'mae'), ('Хорошо / плохо', None)]
+    for column, (label, field) in zip(st.columns(3), fields):
+        value = f"{metrics[field]:.3f}" if field else f"{metrics['gf']} / {metrics['bf']}"
+        column.metric(f'{prefix} · {label}', value)
 
 
 def render_lab07():
     st.title('ЛР7 · Как выбрать модель')
-    st.caption('Данные и постановка → эксперименты → выводы и Orange. Результаты хранятся в текущей браузерной сессии; скачайте исследование для продолжения позже.')
-    teacher = st.toggle('Режим преподавателя', key='lab07_teacher')
+    with st.expander('Дополнительно'):
+        teacher = st.toggle('Режим преподавателя', key='lab07_teacher')
     task = st.radio('Выберите маршрут', list(TASK_NAMES), format_func=TASK_NAMES.get, horizontal=True, key='lab07_task')
     key = 'lab07_' + task
     step = int(st.session_state.get(key + 'step', 0))
@@ -249,15 +264,17 @@ def render_lab07():
     if forward.button('Далее: ' + ('обучить две модели' if step == 0 else 'выбрать модель для отчёта'), disabled=step == 2 or not ready, key=key + 'next'):
         st.session_state[key + 'step'] = step + 1; st.rerun()
     if step == 1 and len(records) < 2:
-        st.info('Для выводов сохраните две модели на одном Test.' + (' В режиме преподавателя достаточно одной.' if teacher else ''))
+        st.caption(f'Сохранено {len(records)} из 2 моделей для перехода к выводам.')
 
 
 def _stage_data(task, key):
     st.subheader('1/3 · Данные и постановка')
+    st.caption('Выберите источник и признаки, затем зафиксируйте постановку.')
     source, frame, splits, meta = _load_data(task, key)
     if frame is None: return
     st.plotly_chart(_plot_source(frame, task), use_container_width=True)
-    st.dataframe(frame.head(10), use_container_width=True)
+    with st.expander('Показать первые 10 строк'):
+        st.dataframe(frame.head(10), use_container_width=True)
     schema = _prepare_schema(task, frame, splits, key, source)
     if schema is None: return
     features, target, classes, prepared, time_column, value_column, lag = schema
@@ -266,7 +283,9 @@ def _stage_data(task, key):
     current = st.session_state.get(key + 'data_fingerprint')
     if current and current != fingerprint:
         st.warning('Постановка изменилась. Прежние исследования останутся в архиве по своему fingerprint; модели разных данных нельзя сравнивать.')
-    st.caption(f"Train/Test/Control: {len(prepared['train'])}/{len(prepared['test'])}/{len(prepared.get('control')) if prepared.get('control') is not None else 0}; fingerprint: {short_fingerprint(fingerprint)}")
+    st.caption(f"Train {len(prepared['train'])} · Test {len(prepared['test'])} · Control {len(prepared.get('control')) if prepared.get('control') is not None else 0}")
+    with st.expander('Технические сведения'):
+        st.code(fingerprint, language='text')
     if st.button('Зафиксировать постановку', key=key + 'commit_data', type='primary'):
         st.session_state[key + 'data'] = (source, frame, splits, meta, schema)
         st.session_state[key + 'data_fingerprint'] = fingerprint
@@ -300,7 +319,7 @@ def _stage_experiments(task, key):
     if ctx is None: return
     fp = st.session_state[key + 'data_fingerprint']
     records = st.session_state.setdefault(key + 'studies', {}).setdefault(fp, [])
-    st.info(f"Ваша задача: обучите 2 модели на одних данных и сравните Test. {ctx['meta']['name']} · Train {len(ctx['prepared']['train'])}, Test {len(ctx['prepared']['test'])}, Control {len(ctx['prepared'].get('control')) if ctx['prepared'].get('control') is not None else 0}.")
+    st.caption(f"Обучите и сохраните две модели, затем сравните Test. {ctx['meta']['name']} · Train {len(ctx['prepared']['train'])} · Test {len(ctx['prepared']['test'])}.")
     left, main = st.columns([1, 2])
     with left:
         st.markdown('#### Рабочая модель')
@@ -332,7 +351,7 @@ def _stage_experiments(task, key):
                 except ValueError as exc: st.error(str(exc))
                 else: st.rerun()
     with main:
-        if engine is None: st.info('Настройте и запустите рабочую модель слева.')
+        if engine is None: st.caption('График и метрики появятся после обучения.')
         else:
             pred = engine.predict(ctx['x_test'])
             baseline = persistence_baseline(ctx['prepared']['test'], ['lag_1']) if task == 'timeseries' else None
@@ -340,16 +359,16 @@ def _stage_experiments(task, key):
                                    features=ctx['features'], engine=engine, preprocessor=ctx['preprocessor'])
             st.plotly_chart(fig, use_container_width=True)
             metrics = _metrics(task, ctx['prepared']['test'], ctx['target'], pred, ctx['classes'], tolerance)
-            st.write({k: metrics[k] for k in ('accuracy', 'macro_f1', 'gf', 'bf') if k in metrics} if task == 'classification' else {k: metrics[k] for k in ('mse', 'rmse', 'mae', 'gf', 'bf') if k in metrics})
+            _metric_cards(metrics, task)
             with st.expander('Кривые Loss Train/Test'):
                 st.line_chart(pd.DataFrame(engine.history).set_index('epoch')[['train_loss', 'validation_loss']])
     st.markdown('#### Сохранённые эксперименты')
     if records: st.dataframe(_history_table(records, st.session_state.get(key + 'locked_id')), hide_index=True, use_container_width=True)
-    else: st.info('История пуста. Сохраните первую модель; память браузерной сессии не является постоянным хранилищем.')
+    else: st.caption('Сохранённых моделей пока нет.')
     if records:
         ids = [r['id'] for r in records]
         compare = st.multiselect('Модели для сравнения', ids, default=ids[:2], key=key + 'compare_ids')
-        if st.button('Сравнить выбранные', disabled=len(compare) < 2, key=key + 'compare'):
+        if len(compare) >= 2:
             fig = go.Figure()
             predictions_figure = go.Figure()
             for record in records:
@@ -360,18 +379,18 @@ def _stage_experiments(task, key):
                     predictions_figure.add_scatter(x=list(range(len(values))), y=np.argmax(values, axis=1) if task == 'classification' else values[:, 0], name=record['name'])
             st.plotly_chart(fig.update_layout(title='Test Loss по фактическим эпохам'), use_container_width=True)
             st.plotly_chart(predictions_figure.update_layout(title='Предсказания на одном Test'), use_container_width=True)
-            st.dataframe(_history_table([r for r in records if r['id'] in compare]), hide_index=True)
-        st.download_button('Экспорт исследования JSON', export_research(fp, records), 'lab07_research.json', 'application/json', key=key + 'research_export')
-        if st.checkbox('Подтверждаю очистку истории текущей постановки', key=key + 'clear_confirm') and st.button('Очистить историю', key=key + 'clear'):
+    with st.expander('Управление историей'):
+        st.caption('История хранится в текущей сессии. Скачать её можно в ZIP на последнем этапе.')
+        upload = st.file_uploader('Восстановить исследование из JSON (до 8 МБ)', type=['json'], key=key + 'research_import')
+        if upload and st.button('Восстановить историю', key=key + 'import'):
+            try: imported = import_research(upload.getvalue(), fp)
+            except (ValueError, KeyError, TypeError) as exc: st.error(f'Импорт отклонён: {exc}')
+            else:
+                existing = {r['id'] for r in records}
+                records.extend(r for r in imported if r['id'] not in existing)
+                st.rerun()
+        if records and st.checkbox('Подтверждаю очистку истории текущей постановки', key=key + 'clear_confirm') and st.button('Очистить историю', key=key + 'clear'):
             records.clear(); st.session_state.pop(key + 'locked_id', None); st.session_state.pop(key + 'control_result', None); st.rerun()
-    upload = st.file_uploader('Импорт исследования JSON (до 8 МБ)', type=['json'], key=key + 'research_import')
-    if upload and st.button('Импортировать исследование', key=key + 'import'):
-        try: imported = import_research(upload.getvalue(), fp)
-        except (ValueError, KeyError, TypeError) as exc: st.error(f'Импорт отклонён: {exc}')
-        else:
-            existing = {r['id'] for r in records}
-            records.extend(r for r in imported if r['id'] not in existing)
-            st.rerun()
 
 def _stage_final(task, key):
     st.subheader('3/3 · Выводы и Orange')
@@ -380,7 +399,8 @@ def _stage_final(task, key):
     fp = st.session_state[key + 'data_fingerprint']
     records = st.session_state.get(key + 'studies', {}).get(fp, [])
     if not records: st.warning('Сначала сохраните модель на этапе 2.'); return
-    st.info('Выбирайте модель только по Test. Control используйте один раз после окончательного выбора.')
+    st.caption('Сравните Test, выберите модель и зафиксируйте её до проверки Control.')
+    st.dataframe(_history_table(records, st.session_state.get(key + 'locked_id')), hide_index=True, use_container_width=True)
     ids = [r['id'] for r in records]
     chosen = st.selectbox('Сохранённая модель для отчёта', ids, format_func=lambda rid: next(f"{r['name']} ({rid}) · Test {r['test_metrics'].get('rmse', r['test_metrics'].get('accuracy')):.3f}" for r in records if r['id'] == rid), key=key + 'chosen_id')
     record = next(r for r in records if r['id'] == chosen)
@@ -389,12 +409,12 @@ def _stage_final(task, key):
     if st.button('Зафиксировать выбор', disabled=locked_id is not None, key=key + 'lock', type='primary'):
         st.session_state[key + 'locked_id'] = chosen; locked_id = chosen
     if locked_id is None:
-        st.warning('Итоговая проверка Control станет доступна после фиксации выбранной сохранённой модели.')
+        st.caption('После фиксации выбора станет доступна итоговая проверка Control.')
         return
     record = next(r for r in records if r['id'] == locked_id)
     frozen = restore_engine(record['snapshot'])
-    st.success(f"Зафиксирована модель {record['name']} ({locked_id}), эпоха {record['epochs']}. Дальнейшая работа с рабочей моделью не изменит её.")
-    st.write('Test:', record['test_metrics'])
+    st.caption(f"Зафиксирована модель {record['name']} ({locked_id}), эпоха {record['epochs']}.")
+    _metric_cards(record['test_metrics'], task)
     control = ctx['prepared'].get('control')
     result = st.session_state.get(key + 'control_result')
     if control is not None and result is None:
@@ -403,8 +423,14 @@ def _stage_final(task, key):
             result = {'id': locked_id, 'data_fingerprint': fp, 'metrics': _metrics(task, control, ctx['target'], prediction, ctx['classes'], frozen.tolerance)}
             st.session_state[key + 'control_result'] = result; st.rerun()
     if result is not None and result['id'] == locked_id and result['data_fingerprint'] == fp:
-        st.write(f"Control модели {record['name']} ({locked_id}):", result['metrics'])
+        st.markdown(f"#### Control · модель {record['name']} ({locked_id})")
+        _metric_cards(result['metrics'], task, 'Control')
+        if task == 'classification':
+            with st.expander('Матрица ошибок'):
+                st.dataframe(pd.DataFrame(result['metrics']['confusion_matrix'], index=ctx['classes'], columns=ctx['classes']))
     elif control is None: st.info('Control не загружен; независимая проверка недоступна.')
+    if control is not None and result is None:
+        return
     prediction = frozen.predict(ctx['x_test'])
     test_predictions = ctx['prepared']['test'].copy()
     test_predictions['prediction'] = [ctx['classes'][i] for i in np.argmax(prediction, axis=1)] if task == 'classification' else prediction[:, 0]
@@ -425,7 +451,6 @@ def _stage_final(task, key):
                          metrics={'test': record['test_metrics'], **({'control': result['metrics']} if result else {})},
                          experiments=_history_table(records, locked_id), research_json=export_research(fp, records),
                          report=f"# ЛР7 · модель {record['name']} ({locked_id})\n\nВыбрана по Test и зафиксирована до Control.\n")
-    st.download_button('Скачать результаты (.zip)', package, 'lab07_results.zip', 'application/zip', key=key + 'download')
-    st.download_button('Скачать experiments.csv', _history_table(records, locked_id).to_csv(index=False).encode('utf-8'), 'experiments.csv', 'text/csv', key=key + 'experiments_csv')
-    st.download_button('Скачать исследование JSON', export_research(fp, records), 'lab07_research.json', 'application/json', key=key + 'final_json')
-    st.caption('Orange: File(train.csv) → Select Columns → Neural Network → Test & Score; test.csv подключите как Test Data. Для ряда используйте готовые lag_1..lag_N и one-step target.')
+    st.markdown('#### Результаты и Orange')
+    st.caption('ZIP содержит таблицу сравнения, предсказания, CSV для Orange, JSON исследования и инструкцию. Сохраните его: история в приложении живёт только в текущей сессии.')
+    st.download_button('Скачать результаты ZIP', package, 'lab07_results.zip', 'application/zip', key=key + 'download', type='primary')

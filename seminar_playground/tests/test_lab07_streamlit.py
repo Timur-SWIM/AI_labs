@@ -18,8 +18,10 @@ def _click(app, label):
 
 def test_two_models_survive_navigation():
     app = _app()
+    assert not app.get('download_button')
     _click(app, 'Зафиксировать постановку')
     _click(app, 'Далее: обучить две модели')
+    assert not app.get('download_button')
     _click(app, 'Запустить обучение')
     _click(app, 'Сохранить эксперимент')
     records = app.session_state['lab07_regressionstudies'][app.session_state['lab07_regressiondata_fingerprint']]
@@ -30,10 +32,14 @@ def test_two_models_survive_navigation():
     _click(app, 'Запустить обучение')
     _click(app, 'Сохранить эксперимент')
     assert len(records) == 2 and records[0]['test_metrics'] == before
+    assert not app.get('download_button')
+    assert not any(b.label == 'Сравнить выбранные' for b in app.button)
+    assert any('Test RMSE' in frame.value.columns for frame in app.dataframe)
     _click(app, 'Далее: выбрать модель для отчёта')
     assert any(s.value.startswith('3/3') for s in app.subheader)
     assert not any(s.value.startswith('2/3') for s in app.subheader)
     assert not any(b.label == 'Итоговая проверка Control' for b in app.button)
+    assert not app.get('download_button')
     _click(app, 'Зафиксировать выбор')
     assert app.session_state['lab07_regressionlocked_id'] == records[0]['id']
     _click(app, 'Назад')
@@ -42,6 +48,7 @@ def test_two_models_survive_navigation():
     _click(app, 'Далее: выбрать модель для отчёта')
     _click(app, 'Итоговая проверка Control')
     assert app.session_state['lab07_regressioncontrol_result']['id'] == records[0]['id']
+    assert [b.label for b in app.get('download_button')] == ['Скачать результаты ZIP']
     assert len(records) == 2
 
 
