@@ -1,7 +1,9 @@
-# Explicitly opt-in for this machine's LAN and Tailscale interfaces.
-# Default compose.yaml stays localhost-only.
+# Opt-in template. Set actual interface addresses before using this file.
+# Example:
+# LAN_BIND_IP=192.168.1.20 TAILSCALE_BIND_IP=100.64.0.10 \
+#   docker compose -f compose.yaml -f compose.lan.yaml up -d
 services:
   seminar-playground:
     ports:
-      - "192.168.10.50:8501:8501"
-      - "100.86.113.13:8501:8501"
+      - "${LAN_BIND_IP:?Set LAN_BIND_IP to an address on this host}:8501:8501"
+      - "${TAILSCALE_BIND_IP:?Set TAILSCALE_BIND_IP to the host Tailscale address}:8501:8501"
