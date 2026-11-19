@@ -1,4 +1,4 @@
-# MLP Playground — ЛР №6
+# MLP Playground — ЛР №6 и ЛР №7
 
 Локальный интерактивный тренажёр к ЛР6: один нейрон, градиентный спуск, настоящая NumPy MLP с паузой/продолжением и диагностические задания. Он не подключается к серверам, SSH, VPN, базам данных или внешним API. Все результаты живут в памяти вкладки браузера и экспортируются пользователем.
 
@@ -51,7 +51,17 @@ ssh -N -L 8501:127.0.0.1:8501 USER@VM_IP
 
 В Windows PowerShell встроенная команда такая же. При занятом порте: `ssh -N -L 18501:127.0.0.1:8501 USER@VM_IP`, затем откройте `http://127.0.0.1:18501`. Для VM за NAT нужны доступный адрес SSH или port forwarding гипервизора.
 
-Менее приватный вариант только для собственной VM/LAN: `docker compose -f compose.yaml -f compose.lan.yaml up -d --build`, затем `http://VM_IP:8501`. Это открывает сервис на интерфейс VM: используйте bridged/host-only сеть или NAT forwarding, firewall и не публикуйте порт в интернет; после занятия вернитесь к обычному `docker compose down` и закрытому режиму.
+### Локальная сеть и Tailscale
+
+Для этого компьютера подготовлен явный override: он публикует сервис только на LAN-адрес `192.168.10.50` и Tailscale-адрес `100.86.113.13`, не на всех интерфейсах.
+
+```bash
+docker compose -f compose.yaml -f compose.lan.yaml up -d --build
+```
+
+Открывайте приложение из локальной сети по `http://192.168.10.50:8501`, а с устройства в tailnet — по `http://100.86.113.13:8501` или `http://ai-dev.tail8780c6.ts.net:8501`. Доступ через Tailscale дополнительно подчиняется ACL tailnet. При изменении IP-адресов обновите `compose.lan.yaml`; закрытый режим возвращается командой `docker compose -f compose.yaml -f compose.lan.yaml down`.
+
+Не публикуйте порт в интернет. Если нужен доступ из другой LAN/VM, используйте bridged/host-only сеть или NAT forwarding и ограничьте firewall.
 
 ## Проверки
 
@@ -62,4 +72,4 @@ pytest -q
 
 `tests/` проверяет формулы, Adam pause/resume, нормализацию, экспорт и независимость сессий. `docker compose config -q` проверяет compose-описание.
 
-См. также [STUDENT_GUIDE.md](STUDENT_GUIDE.md), [TEACHER_GUIDE.md](TEACHER_GUIDE.md), [EXERCISES.md](EXERCISES.md).
+См. также [STUDENT_GUIDE.md](STUDENT_GUIDE.md), [TEACHER_GUIDE.md](TEACHER_GUIDE.md), [EXERCISES.md](EXERCISES.md), [STUDENT_GUIDE_LAB07.md](STUDENT_GUIDE_LAB07.md), [TEACHER_GUIDE_LAB07.md](TEACHER_GUIDE_LAB07.md), [LAB07_IMPLEMENTATION_NOTES.md](LAB07_IMPLEMENTATION_NOTES.md). В приложении после вкладок ЛР6 доступен раздел «ЛР7 — прикладные задачи» с аппроксимацией, временным рядом и классификацией.

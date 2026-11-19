@@ -1,0 +1,19 @@
+{
+  "source": "demo",
+  "formula": "target = sin(x1) cos(x2) + 0.12 x1² - 0.08 x2",
+  "seed": 42,
+  "selected_by": "test_mse",
+  "selected": {
+    "architecture": "2-16-16-1",
+    "parameters": 337,
+    "epochs": 300,
+    "train_mse": 0.0005013644927032329,
+    "test_mse": 0.0009104326127549947,
+    "train_gf": 107,
+    "train_bf": 1,
+    "test_gf": 32,
+    "test_bf": 4,
+    "test_max_error": 0.0790388236851462,
+    "test_mean_error": 0.02327859479788687
+  }
+}

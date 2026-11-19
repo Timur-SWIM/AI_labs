@@ -10,6 +10,7 @@ from src.experiments import make_split, evaluate, record
 from src.lessons import neuron_metrics, descent_step
 from src.exports import csv_bytes, json_bytes, markdown_report, parity_png
 from src.scenarios import SCENARIOS, success
+from src.lab07_ui import render_lab07
 
 st.set_page_config(page_title="MLP Playground — ЛР6", page_icon="🧠", layout="wide")
 
@@ -126,3 +127,6 @@ with tab4:
     st.text_area("Гипотеза / Что изменил / Что увидел / Вывод",key="hypothesis")
     if st.session_state.get("teacher"): st.info("Объяснение: A — поднимите lr постепенно; B — уменьшите lr; C — проверьте размер модели/данных и сравните validation, а не рисуйте переобучение.")
     footer("Симптомы и успех считаются из реального запуска с фиксированными настройками, не из готовой картинки.","Какая метрика показывает качество на новых данных и почему одного train loss недостаточно?")
+
+# ЛР7 подключена как отдельный раздел; код и состояние ЛР6 выше не меняются.
+render_lab07()

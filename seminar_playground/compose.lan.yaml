@@ -1,5 +1,7 @@
-# Explicitly opt-in for a student's own VM/LAN; do not use by default.
+# Explicitly opt-in for this machine's LAN and Tailscale interfaces.
+# Default compose.yaml stays localhost-only.
 services:
   seminar-playground:
     ports:
-      - "0.0.0.0:8501:8501"
+      - "192.168.10.50:8501:8501"
+      - "100.86.113.13:8501:8501"
