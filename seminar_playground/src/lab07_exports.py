@@ -22,7 +22,7 @@ def _json(value):
 
 def orange_zip(*, dataset_manifest, train, test, control=None, predictions=None,
                control_predictions=None, experiment_config=None, metrics=None,
-               report="# ЛР7\n", notes=None):
+               report="# ЛР7\n", notes=None, experiments=None, research_json=None):
     if not isinstance(train, pd.DataFrame) or not isinstance(test, pd.DataFrame):
         raise ValueError("Для экспорта нужны DataFrame Train и Test")
     files = {
@@ -37,6 +37,10 @@ def orange_zip(*, dataset_manifest, train, test, control=None, predictions=None,
         files["predictions_test.csv"] = predictions.to_csv(index=False).encode("utf-8")
     if control_predictions is not None:
         files["control_predictions.csv"] = control_predictions.to_csv(index=False).encode("utf-8")
+    if experiments is not None:
+        files["experiments.csv"] = experiments.to_csv(index=False).encode("utf-8")
+    if research_json is not None:
+        files["research.json"] = research_json
     if experiment_config is not None:
         files["experiment_config.json"] = _json(experiment_config)
     if metrics is not None:

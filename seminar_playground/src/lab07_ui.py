@@ -4,12 +4,14 @@ from __future__ import annotations
 import io
 import json
 import hashlib
+import copy
 
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
+from .lab07_research import save_experiment, restore_engine, export_research, import_research, MAX_EXPERIMENTS
 from .lab07_datasets import demo_splits
 from .lab07_engine import Lab07Engine, one_hot, validate_layers
 from .lab07_exports import orange_zip
@@ -209,158 +211,221 @@ def _settings(task, input_dim, output_dim, key):
     return layers, learning_rate, epochs, seed, optimizer, init_scale, tolerance
 
 
+
+def _metrics(task, frame, target, prediction, classes, tolerance):
+    if task == 'classification':
+        labels = [classes[i] for i in np.argmax(prediction, axis=1)]
+        return classification_metrics(frame[target].tolist(), labels, classes)
+    y = pd.to_numeric(frame[target], errors='raise').to_numpy(float).reshape(-1, 1)
+    return (forecasting_metrics if task == 'timeseries' else regression_metrics)(y, prediction, tolerance)
+
+
+def _history_table(records, chosen=None):
+    return pd.DataFrame([{'ID': r['id'], 'Имя': r['name'], 'Архитектура': '-'.join(map(str, r['architecture'])),
+                          'Параметров': r['parameters'], 'Эпох': r['epochs'], 'Train': str({k: v for k, v in r['train_metrics'].items() if k in ('rmse', 'accuracy', 'macro_f1')}),
+                          'Test': str({k: v for k, v in r['test_metrics'].items() if k in ('rmse', 'accuracy', 'macro_f1')}),
+                          'Seed': r['seed'], 'LR': r['learning_rate'], 'Выбрана': r['id'] == chosen} for r in records])
+
+
 def render_lab07():
-    st.title("ЛР7 · Как выбрать модель")
-    st.caption("Пять этапов учебного исследования: данные → постановка → обучение → сравнение → Orange.")
-    teacher = st.toggle("Режим преподавателя", key="lab07_teacher")
-    if teacher: st.info("Ведущий: просите менять только один фактор, выбирать модель по Test и открывать Control в самом конце.")
-    task = st.radio("Выберите маршрут", list(TASK_NAMES), format_func=TASK_NAMES.get, horizontal=True, key="lab07_task")
-    key = "lab07_" + task
-    step_key = key + "step_index"
-    step = max(0, min(4, int(st.session_state.get(step_key, 0))))
-    st.session_state[step_key] = step
-    st.progress((step + 1) / len(STEP_NAMES), text=f"Этап {step + 1} из 5 · {STEP_NAMES[step]}")
-    back, next_step = st.columns(2)
-    if back.button("Назад", key=key + "back", disabled=step == 0):
-        st.session_state[step_key] = step - 1
-        st.rerun()
-    if next_step.button("Далее", key=key + "next", disabled=step == 4):
-        st.session_state[step_key] = step + 1
-        st.rerun()
-    with st.container(key=key + f"screen_{step + 1}"):
-        _render_lab07_step(task, key, step)
-
-
-def _render_lab07_step(task, key, step):
+    st.title('ЛР7 · Как выбрать модель')
+    st.caption('Данные и постановка → эксперименты → выводы и Orange. Результаты хранятся в текущей браузерной сессии; скачайте исследование для продолжения позже.')
+    teacher = st.toggle('Режим преподавателя', key='lab07_teacher')
+    task = st.radio('Выберите маршрут', list(TASK_NAMES), format_func=TASK_NAMES.get, horizontal=True, key='lab07_task')
+    key = 'lab07_' + task
+    step = int(st.session_state.get(key + 'step', 0))
+    st.progress((step + 1) / 3, text=f'{step + 1}/3 · {("Данные и постановка", "Эксперименты", "Выводы и Orange")[step]}')
     if step == 0:
-        source, frame, splits, meta = _load_data(task, key)
-        if frame is None:
-            st.session_state.pop(key + "data", None)
-            return
-        st.session_state[key + "data"] = (source, frame, splits, meta)
+        _stage_data(task, key)
+    elif step == 1:
+        _stage_experiments(task, key)
     else:
-        data = st.session_state.get(key + "data")
-        if data is None:
-            st.warning("Сначала подготовьте данные на этапе 1.")
-            return
-        source, frame, splits, meta = data
-    stage = STEP_NAMES[step]
-    st.info(f"Сейчас нужно: пройти этап «{stage}». Источник: {meta['source']}; Train/Test/Control: {len(splits['train'])}/{len(splits['test'])}/{len(splits['control']) if splits.get('control') is not None else 0}.")
-    if step == 0:
-        st.subheader("1/5 · Получите и исследуйте данные")
-        st.plotly_chart(_plot_source(frame, task), use_container_width=True)
-        st.dataframe(frame.head(10), use_container_width=True)
-        st.caption(f"Строк: {len(frame)} · столбцов: {len(frame.columns)} · доля пропусков: {frame.isna().mean().mean():.1%} · подсказка типа: {TASK_NAMES[suggest_task(frame)]}")
-        st.text_area("Что за задача и почему?", key=key + "hypothesis")
-        return
-    schema = _prepare_schema(task, frame, splits, key, meta["source"]) if step == 1 else st.session_state.get(key + "schema")
+        _stage_final(task, key)
+    back, forward = st.columns(2)
+    if back.button('Назад', disabled=step == 0, key=key + 'back'):
+        st.session_state[key + 'step'] = step - 1; st.rerun()
+    records = st.session_state.get(key + 'studies', {}).get(st.session_state.get(key + 'data_fingerprint'), [])
+    ready = (step == 0 and key + 'data_fingerprint' in st.session_state) or (step == 1 and (len(records) >= 2 or teacher and len(records) >= 1))
+    if forward.button('Далее: ' + ('обучить две модели' if step == 0 else 'выбрать модель для отчёта'), disabled=step == 2 or not ready, key=key + 'next'):
+        st.session_state[key + 'step'] = step + 1; st.rerun()
+    if step == 1 and len(records) < 2:
+        st.info('Для выводов сохраните две модели на одном Test.' + (' В режиме преподавателя достаточно одной.' if teacher else ''))
+
+
+def _stage_data(task, key):
+    st.subheader('1/3 · Данные и постановка')
+    source, frame, splits, meta = _load_data(task, key)
+    if frame is None: return
+    st.plotly_chart(_plot_source(frame, task), use_container_width=True)
+    st.dataframe(frame.head(10), use_container_width=True)
+    schema = _prepare_schema(task, frame, splits, key, source)
     if schema is None: return
-    if step == 1:
-        st.session_state[key + "schema"] = schema
-    features, target, classes, prepared_splits, time_column, value_column, lag = schema
-    if step == 1:
-        st.subheader("2/5 · Определите задачу и подготовьте признаки")
-        st.write(f"Features → Target: `{features}` → `{target}`")
-        st.plotly_chart(_plot_source(frame, task, None if task == "timeseries" else target), use_container_width=True)
-        st.success("Схема готова. Перейдите к этапу 3, чтобы запустить реальные обновления весов.")
-        return
-    if task == "classification":
-        classes = list(classes); y_train = one_hot(prepared_splits["train"][target].tolist(), classes); y_test = one_hot(prepared_splits["test"][target].tolist(), classes); output_dim = len(classes)
+    features, target, classes, prepared, time_column, value_column, lag = schema
+    fingerprint = experiment_fingerprint({'train': prepared['train'], 'test': prepared['test'], 'control': prepared.get('control')}, task, features, target,
+                                         time_column=time_column, value_column=value_column, lag=lag, preprocessing={'features': features})
+    current = st.session_state.get(key + 'data_fingerprint')
+    if current and current != fingerprint:
+        st.warning('Постановка изменилась. Прежние исследования останутся в архиве по своему fingerprint; модели разных данных нельзя сравнивать.')
+    st.caption(f"Train/Test/Control: {len(prepared['train'])}/{len(prepared['test'])}/{len(prepared.get('control')) if prepared.get('control') is not None else 0}; fingerprint: {short_fingerprint(fingerprint)}")
+    if st.button('Зафиксировать постановку', key=key + 'commit_data', type='primary'):
+        st.session_state[key + 'data'] = (source, frame, splits, meta, schema)
+        st.session_state[key + 'data_fingerprint'] = fingerprint
+        st.session_state.pop(key + 'engine', None)
+        st.session_state.pop(key + 'model_fingerprint', None)
+        st.session_state.pop(key + 'locked_id', None)
+        st.session_state.pop(key + 'control_result', None)
+        st.session_state.setdefault(key + 'studies', {}).setdefault(fingerprint, [])
+        st.success('Постановка зафиксирована. Далее обучите две модели.')
+
+
+def _context(task, key):
+    data = st.session_state.get(key + 'data')
+    if data is None:
+        st.warning('Сначала зафиксируйте постановку на этапе 1.'); return None
+    source, frame, splits, meta, schema = data
+    features, target, classes, prepared, time_column, value_column, lag = schema
+    preprocessor = fit_preprocessor(prepared['train'][features], features)
+    x_train = preprocessor.transform(prepared['train'][features]); x_test = preprocessor.transform(prepared['test'][features])
+    if task == 'classification':
+        y_train = one_hot(prepared['train'][target].tolist(), classes); y_test = one_hot(prepared['test'][target].tolist(), classes)
     else:
-        y_train = pd.to_numeric(prepared_splits["train"][target], errors="raise").to_numpy(float).reshape(-1, 1); y_test = pd.to_numeric(prepared_splits["test"][target], errors="raise").to_numpy(float).reshape(-1, 1); output_dim = 1
-    x_train_raw, x_test_raw = prepared_splits["train"][features], prepared_splits["test"][features]
-    preprocessor = fit_preprocessor(x_train_raw, features)
-    x_train, x_test = preprocessor.transform(x_train_raw), preprocessor.transform(x_test_raw)
-    settings = _settings(task, x_train.shape[1], output_dim, key) if step == 2 else st.session_state.get(key + "settings")
-    if settings is None:
-        st.warning("Сначала настройте модель на этапе 3.")
-        return
-    if step == 2:
-        st.session_state[key + "settings"] = settings
-    layers, learning_rate, epochs, seed, optimizer, init_scale, tolerance = settings
-    data_fp = experiment_fingerprint({"train": prepared_splits["train"], "test": prepared_splits["test"], "control": prepared_splits.get("control")}, task, features, target, time_column=time_column, value_column=value_column, lag=lag, preprocessing={"features": features})
-    model_fp = model_fingerprint(data_fingerprint=data_fp, architecture=layers, optimizer=optimizer, learning_rate=learning_rate, seed=seed, init_scale=init_scale, task=task)
-    old_fp = st.session_state.get(key + "fingerprint")
-    engine = st.session_state.get(key + "engine")
-    if old_fp and old_fp != model_fp:
-        st.warning("Изменились данные или параметры модели. Начните новый эксперимент: старые веса не применяются.")
-        engine = None
-        # Control и lock принадлежат старому fingerprint и не могут отображаться снова.
-        st.session_state.pop(key + "control_result", None)
-        st.session_state.pop(key + "locked_model", None)
-        st.session_state.pop(key + "experiments", None)
-    st.caption(f"Fingerprint данных/модели: `{short_fingerprint(model_fp)}`")
-    if step == 2:
-        st.subheader("3/5 · Обучите модель")
-        st.caption(f"Схема MLP: {x_train.shape[1]} → {' → '.join(map(str, layers[1:-1])) or 'без скрытого слоя'} → {output_dim}")
-        actions = st.columns(3)
-        if actions[0].button("Запустить обучение", type="primary", key=key + "start"):
-            engine = Lab07Engine(layers, task, seed, init_scale=init_scale, optimizer=optimizer, learning_rate=learning_rate, tolerance=tolerance)
-            engine.train_epochs(epochs, x_train, y_train, x_test, y_test); st.session_state[key + "engine"] = engine; st.session_state[key + "fingerprint"] = model_fp; st.session_state.pop(key + "control_result", None); st.rerun()
-        if actions[1].button(f"Продолжить +{epochs} эпох", key=key + "continue") and engine is not None:
-            engine.stopped = False; engine.train_epochs(epochs, x_train, y_train, x_test, y_test); st.session_state[key + "engine"] = engine; st.session_state.pop(key + "locked_model", None); st.session_state.pop(key + "control_result", None)
-        if actions[2].button("Начать новый эксперимент", key=key + "reset"):
-            for suffix in ("engine", "fingerprint", "control_result", "locked_model", "experiments"): st.session_state.pop(key + suffix, None)
-            st.rerun()
-        if engine is None:
-            st.info("Пока нет обученной модели. Запустите обучение выше."); return
-        prediction = engine.predict(x_test)
-        if task == "classification":
-            predicted_labels = np.asarray([classes[index] for index in np.argmax(prediction, 1)], dtype=object); metrics = classification_metrics(prepared_splits["test"][target].tolist(), predicted_labels, classes); primary, _ = _primary_plot(task, prepared_splits["test"], target, prediction, classes, features=features, engine=engine, preprocessor=preprocessor)
-        elif task == "timeseries":
-            baseline = persistence_baseline(prepared_splits["test"], ["lag_1"]); metrics = forecasting_metrics(y_test, prediction, tolerance); primary, _ = _primary_plot(task, prepared_splits["test"], target, prediction, baseline=baseline)
+        y_train = pd.to_numeric(prepared['train'][target], errors='raise').to_numpy(float).reshape(-1, 1)
+        y_test = pd.to_numeric(prepared['test'][target], errors='raise').to_numpy(float).reshape(-1, 1)
+    return locals()
+
+
+def _stage_experiments(task, key):
+    st.subheader('2/3 · Эксперименты')
+    ctx = _context(task, key)
+    if ctx is None: return
+    fp = st.session_state[key + 'data_fingerprint']
+    records = st.session_state.setdefault(key + 'studies', {}).setdefault(fp, [])
+    st.info(f"Ваша задача: обучите 2 модели на одних данных и сравните Test. {ctx['meta']['name']} · Train {len(ctx['prepared']['train'])}, Test {len(ctx['prepared']['test'])}, Control {len(ctx['prepared'].get('control')) if ctx['prepared'].get('control') is not None else 0}.")
+    left, main = st.columns([1, 2])
+    with left:
+        st.markdown('#### Рабочая модель')
+        settings = _settings(task, ctx['x_train'].shape[1], ctx['y_train'].shape[1], key)
+        layers, lr, epochs, seed, optimizer, scale, tolerance = settings
+        model_fp = model_fingerprint(data_fingerprint=fp, architecture=layers, optimizer=optimizer, learning_rate=lr, seed=seed, init_scale=scale, task=task)
+        engine = st.session_state.get(key + 'engine')
+        if engine is not None and st.session_state.get(key + 'model_fingerprint') != model_fp:
+            st.warning('Параметры изменились. Для новых настроек запустите обучение заново; сохранённые модели остаются в истории.')
+            engine = None
+        st.caption('MLP: ' + ' → '.join(map(str, layers)))
+        if st.button('Запустить обучение', key=key + 'start', type='primary'):
+            engine = Lab07Engine(layers, task, seed, init_scale=scale, optimizer=optimizer, learning_rate=lr, tolerance=tolerance)
+            engine.train_epochs(epochs, ctx['x_train'], ctx['y_train'], ctx['x_test'], ctx['y_test'])
+            st.session_state[key + 'engine'] = engine; st.session_state[key + 'model_fingerprint'] = model_fp; st.rerun()
+        if st.button(f'Продолжить +{epochs} эпох', disabled=engine is None, key=key + 'continue'):
+            engine.stopped = False; engine.train_epochs(epochs, ctx['x_train'], ctx['y_train'], ctx['x_test'], ctx['y_test']); st.rerun()
+        if st.button('Новый эксперимент', key=key + 'new'):
+            st.session_state.pop(key + 'engine', None); st.session_state.pop(key + 'model_fingerprint', None); st.rerun()
+        if engine is not None:
+            name = st.text_input('Имя модели', value=chr(65 + len(records)) if len(records) < 26 else f'Модель {len(records)+1}', key=key + 'experiment_name')
+            if st.button('Сохранить эксперимент', key=key + 'save'):
+                prediction = engine.predict(ctx['x_test'])
+                try:
+                    save_experiment(records, data_fingerprint=fp, model_fingerprint=model_fp, engine=engine,
+                                    train_metrics=_metrics(task, ctx['prepared']['train'], ctx['target'], engine.predict(ctx['x_train']), ctx['classes'], tolerance),
+                                    test_metrics=_metrics(task, ctx['prepared']['test'], ctx['target'], prediction, ctx['classes'], tolerance),
+                                    name=name, predictions=prediction)
+                except ValueError as exc: st.error(str(exc))
+                else: st.rerun()
+    with main:
+        if engine is None: st.info('Настройте и запустите рабочую модель слева.')
         else:
-            metrics = regression_metrics(y_test, prediction, tolerance); primary, _ = _primary_plot(task, prepared_splits["test"], target, prediction)
-        st.plotly_chart(primary, use_container_width=True)
-        metric_columns = st.columns(4)
-        if task == "classification": metric_columns[0].metric("Accuracy", f"{metrics['accuracy']:.3f}"); metric_columns[1].metric("Macro-F1", f"{metrics['macro_f1']:.3f}"); metric_columns[2].metric("GF/BF", f"{metrics['gf']}/{metrics['bf']}")
-        else: metric_columns[0].metric("Test RMSE", f"{metrics['rmse']:.4f}"); metric_columns[1].metric("Test MAE", f"{metrics['mae']:.4f}"); metric_columns[2].metric("GF/BF", f"{metrics['gf']}/{metrics['bf']}")
-        metric_columns[3].metric("Эпоха", engine.epoch)
-        history = pd.DataFrame(engine.history)
-        if not history.empty: st.plotly_chart(go.Figure([go.Scatter(x=history.epoch, y=history.train_loss, name="Train"), go.Scatter(x=history.epoch, y=history.validation_loss, name="Test")]).update_layout(title="Что заметить: разрыв Train/Test показывает риск переобучения"), use_container_width=True)
-        with st.expander("Технические детали"):
-            st.write(metrics); st.write("Параметров:", engine.parameter_count)
+            pred = engine.predict(ctx['x_test'])
+            baseline = persistence_baseline(ctx['prepared']['test'], ['lag_1']) if task == 'timeseries' else None
+            fig, _ = _primary_plot(task, ctx['prepared']['test'], ctx['target'], pred, ctx['classes'], baseline=baseline,
+                                   features=ctx['features'], engine=engine, preprocessor=ctx['preprocessor'])
+            st.plotly_chart(fig, use_container_width=True)
+            metrics = _metrics(task, ctx['prepared']['test'], ctx['target'], pred, ctx['classes'], tolerance)
+            st.write({k: metrics[k] for k in ('accuracy', 'macro_f1', 'gf', 'bf') if k in metrics} if task == 'classification' else {k: metrics[k] for k in ('mse', 'rmse', 'mae', 'gf', 'bf') if k in metrics})
+            with st.expander('Кривые Loss Train/Test'):
+                st.line_chart(pd.DataFrame(engine.history).set_index('epoch')[['train_loss', 'validation_loss']])
+    st.markdown('#### Сохранённые эксперименты')
+    if records: st.dataframe(_history_table(records, st.session_state.get(key + 'locked_id')), hide_index=True, use_container_width=True)
+    else: st.info('История пуста. Сохраните первую модель; память браузерной сессии не является постоянным хранилищем.')
+    if records:
+        ids = [r['id'] for r in records]
+        compare = st.multiselect('Модели для сравнения', ids, default=ids[:2], key=key + 'compare_ids')
+        if st.button('Сравнить выбранные', disabled=len(compare) < 2, key=key + 'compare'):
+            fig = go.Figure()
+            predictions_figure = go.Figure()
+            for record in records:
+                if record['id'] in compare:
+                    h = record['snapshot']['history']
+                    fig.add_scatter(x=[row['epoch'] for row in h], y=[row['validation_loss'] for row in h], name=record['name'] + ' Test')
+                    values = np.asarray(record['predictions'])
+                    predictions_figure.add_scatter(x=list(range(len(values))), y=np.argmax(values, axis=1) if task == 'classification' else values[:, 0], name=record['name'])
+            st.plotly_chart(fig.update_layout(title='Test Loss по фактическим эпохам'), use_container_width=True)
+            st.plotly_chart(predictions_figure.update_layout(title='Предсказания на одном Test'), use_container_width=True)
+            st.dataframe(_history_table([r for r in records if r['id'] in compare]), hide_index=True)
+        st.download_button('Экспорт исследования JSON', export_research(fp, records), 'lab07_research.json', 'application/json', key=key + 'research_export')
+        if st.checkbox('Подтверждаю очистку истории текущей постановки', key=key + 'clear_confirm') and st.button('Очистить историю', key=key + 'clear'):
+            records.clear(); st.session_state.pop(key + 'locked_id', None); st.session_state.pop(key + 'control_result', None); st.rerun()
+    upload = st.file_uploader('Импорт исследования JSON (до 8 МБ)', type=['json'], key=key + 'research_import')
+    if upload and st.button('Импортировать исследование', key=key + 'import'):
+        try: imported = import_research(upload.getvalue(), fp)
+        except (ValueError, KeyError, TypeError) as exc: st.error(f'Импорт отклонён: {exc}')
+        else:
+            existing = {r['id'] for r in records}
+            records.extend(r for r in imported if r['id'] not in existing)
+            st.rerun()
+
+def _stage_final(task, key):
+    st.subheader('3/3 · Выводы и Orange')
+    ctx = _context(task, key)
+    if ctx is None: return
+    fp = st.session_state[key + 'data_fingerprint']
+    records = st.session_state.get(key + 'studies', {}).get(fp, [])
+    if not records: st.warning('Сначала сохраните модель на этапе 2.'); return
+    st.info('Выбирайте модель только по Test. Control используйте один раз после окончательного выбора.')
+    ids = [r['id'] for r in records]
+    chosen = st.selectbox('Сохранённая модель для отчёта', ids, format_func=lambda rid: next(f"{r['name']} ({rid}) · Test {r['test_metrics'].get('rmse', r['test_metrics'].get('accuracy')):.3f}" for r in records if r['id'] == rid), key=key + 'chosen_id')
+    record = next(r for r in records if r['id'] == chosen)
+    if record['data_fingerprint'] != fp: st.error('Модель принадлежит другой постановке.'); return
+    locked_id = st.session_state.get(key + 'locked_id')
+    if st.button('Зафиксировать выбор', disabled=locked_id is not None, key=key + 'lock', type='primary'):
+        st.session_state[key + 'locked_id'] = chosen; locked_id = chosen
+    if locked_id is None:
+        st.warning('Итоговая проверка Control станет доступна после фиксации выбранной сохранённой модели.')
         return
-    if engine is None:
-        st.warning("Сначала обучите модель на этапе 3."); return
-    prediction = engine.predict(x_test)
-    if task == "classification":
-        predicted_labels = np.asarray([classes[index] for index in np.argmax(prediction, 1)], dtype=object); metrics = classification_metrics(prepared_splits["test"][target].tolist(), predicted_labels, classes)
-    elif task == "timeseries": metrics = forecasting_metrics(y_test, prediction, tolerance)
-    else: metrics = regression_metrics(y_test, prediction, tolerance)
-    if step == 3:
-        st.subheader("4/5 · Сравните эксперименты и зафиксируйте выбор")
-        if st.button("Сохранить эксперимент для сравнения", key=key + "save"):
-            st.session_state.setdefault(key + "experiments", []).append({"fingerprint": model_fp, "snapshot": engine.snapshot(), "metrics": metrics, "architecture": "-".join(map(str, layers)), "parameters": engine.parameter_count, "epoch": engine.epoch, "note": st.session_state.get(key + "hypothesis", "")})
-        experiments = st.session_state.get(key + "experiments", [])
-        if experiments: st.dataframe(pd.DataFrame([{k: item[k] for k in ("fingerprint", "architecture", "parameters", "epoch", "metrics")} for item in experiments]), hide_index=True, use_container_width=True)
-        if st.button("Зафиксировать выбранную модель", type="primary", key=key + "lock"):
-            st.session_state[key + "locked_model"] = {"fingerprint": model_fp, "epoch": engine.epoch, "snapshot": engine.snapshot()}
-            st.session_state.pop(key + "control_result", None)
-        if st.session_state.get(key + "locked_model"): st.success("Модель зафиксирована. Теперь доступна финальная оценка Control на следующем этапе.")
-        return
-    if step == 4:
-        st.subheader("5/5 · Экспорт и Orange")
-        locked = st.session_state.get(key + "locked_model")
-        if splits.get("control") is not None and not locked: st.warning("Сначала зафиксируйте выбранную модель на этапе 4.")
-        control_result = st.session_state.get(key + "control_result")
-        if splits.get("control") is not None and locked and locked["fingerprint"] == model_fp and locked["epoch"] == engine.epoch and st.button("Итоговая проверка Control", key=key + "control", disabled=control_result is not None):
-            control = prepared_splits["control"]; xc = preprocessor.transform(control[features]); yc = pd.to_numeric(control[target], errors="raise").to_numpy(float).reshape(-1, 1) if task != "classification" else control[target].tolist()
-            if task == "classification": control_result = classification_metrics(yc, [classes[index] for index in np.argmax(engine.predict(xc), 1)], classes)
-            else: control_result = forecasting_metrics(yc, engine.predict(xc), tolerance)
-            st.session_state[key + "control_result"] = {"fingerprint": model_fp, "epoch": engine.epoch, "metrics": control_result}
-            control_result = st.session_state[key + "control_result"]
-        if control_result: st.success(f"Control относится к fingerprint {short_fingerprint(control_result['fingerprint'])}, эпохе {control_result['epoch']}."); st.write(control_result["metrics"])
-        elif splits.get("control") is None: st.info("Контрольной выборки нет; независимая финальная оценка недоступна.")
-        test_predictions = prepared_splits["test"].copy(); test_predictions["prediction"] = predicted_labels if task == "classification" else prediction[:, 0]
-        control_predictions = None
-        if control_result and prepared_splits.get("control") is not None:
-            control_predictions = prepared_splits["control"].copy()
-            control_values = engine.predict(preprocessor.transform(prepared_splits["control"][features]))
-            control_predictions["prediction"] = ([classes[index] for index in np.argmax(control_values, 1)] if task == "classification" else control_values[:, 0])
-        manifest = {"source": meta["source"], "task": task, "features": features, "target": target, "time": time_column, "value": value_column, "lag": lag, "seed": seed, "fingerprint": model_fp, "train_rows": len(prepared_splits["train"]), "test_rows": len(prepared_splits["test"]), "control_rows": len(prepared_splits["control"]) if prepared_splits.get("control") is not None else 0, "preprocessing": "fitted on Train only", "control_revealed": bool(control_result)}
-        export_metrics = {"test": metrics};
-        if control_result: export_metrics["control"] = control_result["metrics"]
-        package = orange_zip(dataset_manifest=manifest, train=prepared_splits["train"], test=prepared_splits["test"], control=prepared_splits.get("control"), predictions=test_predictions, control_predictions=control_predictions, experiment_config={"layers": layers, "optimizer": optimizer, "learning_rate": learning_rate, "seed": seed, "fingerprint": model_fp}, metrics=export_metrics, report="# ЛР7\n\nРезультаты текущего эксперимента.\n")
-        st.download_button("Скачать результаты (.zip)", package, "lab07_results.zip", "application/zip", key=key + "download")
-        st.markdown("**Orange:** File(train) → Select Columns → Neural Network → Test & Score; File(test) подключите как Test Data; модель передайте в Predictions. Orange обучает собственную модель, а не открывает веса NumPy-MLP.")
+    record = next(r for r in records if r['id'] == locked_id)
+    frozen = restore_engine(record['snapshot'])
+    st.success(f"Зафиксирована модель {record['name']} ({locked_id}), эпоха {record['epochs']}. Дальнейшая работа с рабочей моделью не изменит её.")
+    st.write('Test:', record['test_metrics'])
+    control = ctx['prepared'].get('control')
+    result = st.session_state.get(key + 'control_result')
+    if control is not None and result is None:
+        if st.button('Итоговая проверка Control', key=key + 'control'):
+            prediction = frozen.predict(ctx['preprocessor'].transform(control[ctx['features']]))
+            result = {'id': locked_id, 'data_fingerprint': fp, 'metrics': _metrics(task, control, ctx['target'], prediction, ctx['classes'], frozen.tolerance)}
+            st.session_state[key + 'control_result'] = result; st.rerun()
+    if result is not None and result['id'] == locked_id and result['data_fingerprint'] == fp:
+        st.write(f"Control модели {record['name']} ({locked_id}):", result['metrics'])
+    elif control is None: st.info('Control не загружен; независимая проверка недоступна.')
+    prediction = frozen.predict(ctx['x_test'])
+    test_predictions = ctx['prepared']['test'].copy()
+    test_predictions['prediction'] = [ctx['classes'][i] for i in np.argmax(prediction, axis=1)] if task == 'classification' else prediction[:, 0]
+    control_predictions = None
+    if result is not None and control is not None:
+        cp = frozen.predict(ctx['preprocessor'].transform(control[ctx['features']]))
+        control_predictions = control.copy()
+        control_predictions['prediction'] = [ctx['classes'][i] for i in np.argmax(cp, axis=1)] if task == 'classification' else cp[:, 0]
+    manifest = {'source': ctx['meta']['source'], 'task': task, 'model_id': locked_id, 'model_name': record['name'],
+                'data_fingerprint': fp, 'model_fingerprint': record['model_fingerprint'], 'architecture': record['architecture'],
+                'optimizer': record['optimizer'], 'learning_rate': record['learning_rate'], 'seed': record['seed'],
+                'epochs': record['epochs'], 'features': ctx['features'], 'target': ctx['target'], 'time': ctx['time_column'],
+                'value': ctx['value_column'], 'lag': ctx['lag'], 'preprocessing': 'fit on Train only',
+                'control_revealed': result is not None, 'limitations': 'Results are session-local; Orange retrains its own model.'}
+    package = orange_zip(dataset_manifest=manifest, train=ctx['prepared']['train'], test=ctx['prepared']['test'], control=control,
+                         predictions=test_predictions, control_predictions=control_predictions,
+                         experiment_config={k: manifest[k] for k in ('model_id', 'architecture', 'optimizer', 'learning_rate', 'seed', 'epochs', 'data_fingerprint')},
+                         metrics={'test': record['test_metrics'], **({'control': result['metrics']} if result else {})},
+                         experiments=_history_table(records, locked_id), research_json=export_research(fp, records),
+                         report=f"# ЛР7 · модель {record['name']} ({locked_id})\n\nВыбрана по Test и зафиксирована до Control.\n")
+    st.download_button('Скачать результаты (.zip)', package, 'lab07_results.zip', 'application/zip', key=key + 'download')
+    st.download_button('Скачать experiments.csv', _history_table(records, locked_id).to_csv(index=False).encode('utf-8'), 'experiments.csv', 'text/csv', key=key + 'experiments_csv')
+    st.download_button('Скачать исследование JSON', export_research(fp, records), 'lab07_research.json', 'application/json', key=key + 'final_json')
+    st.caption('Orange: File(train.csv) → Select Columns → Neural Network → Test & Score; test.csv подключите как Test Data. Для ряда используйте готовые lag_1..lag_N и one-step target.')

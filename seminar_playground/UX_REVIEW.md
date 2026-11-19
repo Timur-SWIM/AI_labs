@@ -25,3 +25,18 @@
 6. Загрузить беззаголовочный TXT и убедиться, что первая строка осталась данными.
 
 Скриншоты не добавлены автоматически: headless-окружение не предоставляет браузерный дисплей.
+
+## Проверка трёхэтапного цикла
+
+Команды из `seminar_playground/`:
+
+```bash
+docker compose config -q
+docker compose build -q
+docker run --rm --user root seminar_playground-seminar-playground:latest sh -c 'pip install -q pytest && pytest -q'
+docker compose up -d --build
+curl -fsS http://127.0.0.1:8501/_stcore/health
+docker compose down
+```
+
+AppTest проверяет сохранение А/Б после смены архитектуры и навигации, фиксацию А до Control, а также обучение трёх режимов. Unit-тест проверяет независимость snapshot и JSON roundtrip. Скриншоты не созданы: графический браузер в окружении не подключён.
